@@ -7,17 +7,17 @@ import { AgentSocketHandler } from "../agent-socket-handler";
 import { AgentSocket } from "../../common/agent-socket";
 
 export class TerminalSocketHandler extends AgentSocketHandler {
-    create(socket : DockgeSocket, server : DockgeServer, agentSocket : AgentSocket) {
+    create(socket: DockgeSocket, server: DockgeServer, agentSocket: AgentSocket) {
 
-        agentSocket.on("terminalInput", async (terminalName : unknown, cmd : unknown, callback) => {
+        agentSocket.on("terminalInput", async (terminalName: unknown, cmd: unknown, callback) => {
             try {
                 checkLogin(socket);
 
-                if (typeof(terminalName) !== "string") {
+                if (typeof (terminalName) !== "string") {
                     throw new Error("Terminal name must be a string.");
                 }
 
-                if (typeof(cmd) !== "string") {
+                if (typeof (cmd) !== "string") {
                     throw new Error("Command must be a string.");
                 }
 
@@ -34,7 +34,7 @@ export class TerminalSocketHandler extends AgentSocketHandler {
         });
 
         // Main Terminal
-        agentSocket.on("mainTerminal", async (terminalName : unknown, callback) => {
+        agentSocket.on("mainTerminal", async (terminalName: unknown, callback) => {
             try {
                 checkLogin(socket);
 
@@ -46,7 +46,7 @@ export class TerminalSocketHandler extends AgentSocketHandler {
                 // TODO: Reset the name here, force one main terminal for now
                 terminalName = "console";
 
-                if (typeof(terminalName) !== "string") {
+                if (typeof (terminalName) !== "string") {
                     throw new ValidationError("Terminal name must be a string.");
                 }
 
@@ -84,19 +84,19 @@ export class TerminalSocketHandler extends AgentSocketHandler {
         });
 
         // Interactive Terminal for containers
-        agentSocket.on("interactiveTerminal", async (stackName : unknown, serviceName : unknown, shell : unknown, callback) => {
+        agentSocket.on("interactiveTerminal", async (stackName: unknown, serviceName: unknown, shell: unknown, callback) => {
             try {
                 checkLogin(socket);
 
-                if (typeof(stackName) !== "string") {
+                if (typeof (stackName) !== "string") {
                     throw new ValidationError("Stack name must be a string.");
                 }
 
-                if (typeof(serviceName) !== "string") {
+                if (typeof (serviceName) !== "string") {
                     throw new ValidationError("Service name must be a string.");
                 }
 
-                if (typeof(shell) !== "string") {
+                if (typeof (shell) !== "string") {
                     throw new ValidationError("Shell must be a string.");
                 }
 
@@ -116,19 +116,19 @@ export class TerminalSocketHandler extends AgentSocketHandler {
         });
 
         // Join Output Terminal
-        agentSocket.on("terminalJoin", async (terminalName : unknown, callback) => {
-            if (typeof(callback) !== "function") {
+        agentSocket.on("terminalJoin", async (terminalName: unknown, callback) => {
+            if (typeof (callback) !== "function") {
                 log.debug("console", "Callback is not a function.");
                 return;
             }
 
             try {
                 checkLogin(socket);
-                if (typeof(terminalName) !== "string") {
+                if (typeof (terminalName) !== "string") {
                     throw new ValidationError("Terminal name must be a string.");
                 }
 
-                let buffer : string = Terminal.getTerminal(terminalName)?.getBuffer() ?? "";
+                let buffer: string = Terminal.getTerminal(terminalName)?.getBuffer() ?? "";
 
                 if (!buffer) {
                     log.debug("console", "No buffer found.");
@@ -143,14 +143,40 @@ export class TerminalSocketHandler extends AgentSocketHandler {
             }
         });
 
+        // Join Combined Terminal
+        agentSocket.on("joinCombinedTerminal", async (stackName: unknown, showTimestamps: unknown, callback) => {
+            try {
+                checkLogin(socket);
+
+                log.debug("joinCombinedTerminal", "Stack name: " + stackName);
+
+                if (typeof (stackName) !== "string") {
+                    throw new ValidationError("Stack name must be a string.");
+                }
+
+                if (typeof (showTimestamps) !== "boolean") {
+                    throw new ValidationError("showTimestamps must be a boolean.");
+                }
+
+                const stack = await Stack.getStack(server, stackName);
+                await stack.joinCombinedTerminal(socket, showTimestamps);
+
+                callbackResult({
+                    ok: true,
+                }, callback);
+            } catch (e) {
+                callbackError(e, callback);
+            }
+        });
+
         // Leave Combined Terminal
-        agentSocket.on("leaveCombinedTerminal", async (stackName : unknown, callback) => {
+        agentSocket.on("leaveCombinedTerminal", async (stackName: unknown, callback) => {
             try {
                 checkLogin(socket);
 
                 log.debug("leaveCombinedTerminal", "Stack name: " + stackName);
 
-                if (typeof(stackName) !== "string") {
+                if (typeof (stackName) !== "string") {
                     throw new ValidationError("Stack name must be a string.");
                 }
 
@@ -193,10 +219,10 @@ export class TerminalSocketHandler extends AgentSocketHandler {
                 }
             } catch (e) {
                 log.debug("terminalResize",
-                        // Added to prevent the lint error when adding the type
-                        // and ts type checker saying type is unknown.
-                        // @ts-ignore
-                        `Error on ${terminalName}: ${e.message}`
+                    // Added to prevent the lint error when adding the type
+                    // and ts type checker saying type is unknown.
+                    // @ts-ignore
+                    `Error on ${terminalName}: ${e.message}`
                 );
             }
         });

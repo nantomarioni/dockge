@@ -82,7 +82,7 @@
             </transition>
 
             <div v-if="stack.isManagedByDockge" class="row">
-                <div class="col-lg-6">
+                <div class="col-lg-12">
                     <!-- General -->
                     <div v-if="isAdd">
                         <h4 class="mb-3">{{ $t("general") }}</h4>
@@ -106,51 +106,23 @@
                         </div>
                     </div>
 
-                    <!-- Containers -->
-                    <h4 class="mb-3">{{ $tc("container", 2) }}</h4>
-
-                    <div v-if="isEditMode" class="input-group mb-3">
-                        <input
-                            v-model="newContainerName"
-                            :placeholder="$t(`New Container Name...`)"
-                            class="form-control"
-                            @keyup.enter="addContainer"
-                        />
-                        <button class="btn btn-primary" @click="addContainer">
-                            {{ $t("addContainer") }}
-                        </button>
-                    </div>
-
-                    <div ref="containerList">
-                        <Container
-                            v-for="(service, name) in jsonConfig.services"
-                            :key="name"
-                            :name="name"
-                            :is-edit-mode="isEditMode"
-                            :first="name === Object.keys(jsonConfig.services)[0]"
-                            :status="serviceStatusList[name]"
-                        />
-                    </div>
-
-                    <button v-if="false && isEditMode && jsonConfig.services && Object.keys(jsonConfig.services).length > 0" class="btn btn-normal mb-3" @click="addContainer">{{ $t("addContainer") }}</button>
-
-                    <!-- General -->
-                    <div v-if="isEditMode">
-                        <h4 class="mb-3">{{ $t("extra") }}</h4>
-                        <div class="shadow-box big-padding mb-3">
-                            <!-- URLs -->
-                            <div class="mb-4">
-                                <label class="form-label">
-                                    {{ $tc("url", 2) }}
-                                </label>
-                                <ArrayInput name="urls" :display-name="$t('url')" placeholder="https://" object-type="x-dockge" />
-                            </div>
-                        </div>
-                    </div>
-
                     <!-- Combined Terminal Output -->
                     <div v-show="!isEditMode">
-                        <h4 class="mb-3">{{ $t("terminal") }}</h4>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="mb-0">{{ $t("terminal") }}</h4>
+                            <div class="form-check form-switch">
+                                <input 
+                                    id="timestampToggle" 
+                                    v-model="showTimestamps" 
+                                    class="form-check-input" 
+                                    type="checkbox"
+                                    @change="onTimestampToggle"
+                                >
+                                <label class="form-check-label" for="timestampToggle">
+                                    Show Timestamps
+                                </label>
+                            </div>
+                        </div>
                         <Terminal
                             ref="combinedTerminal"
                             class="mb-3 terminal"
@@ -161,8 +133,7 @@
                             style="height: 315px;"
                         ></Terminal>
                     </div>
-                </div>
-                <div class="col-lg-6">
+
                     <h4 class="mb-3">{{ stack.composeFileName }}</h4>
 
                     <!-- YAML editor -->
@@ -173,7 +144,6 @@
                             class="yaml-editor"
                             :highlight="highlighterYAML"
                             line-numbers :readonly="!isEditMode"
-                            @input="yamlCodeChange"
                             @focus="editorFocus = true"
                             @blur="editorFocus = false"
                         ></prism-editor>
@@ -199,28 +169,16 @@
                     </div>
 
                     <div v-if="isEditMode">
-                        <!-- Volumes -->
-                        <div v-if="false">
-                            <h4 class="mb-3">{{ $tc("volume", 2) }}</h4>
-                            <div class="shadow-box big-padding mb-3">
+                        <div class="shadow-box big-padding mb-3">
+                            <!-- URLs -->
+                            <div class="mb-4">
+                                <label class="form-label">
+                                    {{ $tc("url", 2) }}
+                                </label>
+                                <ArrayInput name="urls" :display-name="$t('url')" placeholder="https://" object-type="x-dockge" />
                             </div>
                         </div>
-
-                        <!-- Networks -->
-                        <h4 class="mb-3">{{ $tc("network", 2) }}</h4>
-                        <div class="shadow-box big-padding mb-3">
-                            <NetworkInput />
-                        </div>
                     </div>
-
-                    <!-- <div class="shadow-box big-padding mb-3">
-                        <div class="mb-3">
-                            <label for="name" class="form-label"> Search Templates</label>
-                            <input id="name" v-model="name" type="text" class="form-control" placeholder="Search..." required>
-                        </div>
-
-                        <prism-editor v-if="false" v-model="yamlConfig" class="yaml-editor" :highlight="highlighter" line-numbers @input="yamlCodeChange"></prism-editor>
-                    </div>-->
                 </div>
             </div>
 
@@ -240,7 +198,6 @@
 import { highlight, languages } from "prismjs/components/prism-core";
 import { PrismEditor } from "vue-prism-editor";
 import "prismjs/components/prism-yaml";
-import { parseDocument, Document } from "yaml";
 
 import "prismjs/themes/prism-tomorrow.css";
 import "vue-prism-editor/dist/prismeditor.min.css";
@@ -255,7 +212,6 @@ import {
     RUNNING
 } from "../../../common/util-common";
 import { BModal } from "bootstrap-vue-next";
-import NetworkInput from "../components/NetworkInput.vue";
 import dotenv from "dotenv";
 
 const template = `
@@ -279,7 +235,6 @@ let prismjsSymbolDefinition = {
 
 export default {
     components: {
-        NetworkInput,
         FontAwesomeIcon,
         PrismEditor,
         BModal,
@@ -290,11 +245,10 @@ export default {
     beforeRouteLeave(to, from, next) {
         this.exitConfirm(next);
     },
-    yamlDoc: null,  // For keeping the yaml comments
+
     data() {
         return {
             editorFocus: false,
-            jsonConfig: {},
             envsubstJSONConfig: {},
             yamlError: "",
             processing: true,
@@ -309,8 +263,9 @@ export default {
             isEditMode: false,
             submitted: false,
             showDeleteDialog: false,
-            newContainerName: "",
+
             stopServiceStatusTimeout: false,
+            showTimestamps: localStorage.getItem("showTimestamps") === "true",
         };
     },
     computed: {
@@ -380,9 +335,7 @@ export default {
             return getCombinedTerminalName(this.endpoint, this.stack.name);
         },
 
-        networks() {
-            return this.jsonConfig.networks;
-        },
+
 
         endpoint() {
             return this.stack.endpoint || this.$route.params.endpoint || "";
@@ -399,39 +352,14 @@ export default {
     watch: {
         "stack.composeYAML": {
             handler() {
-                if (this.editorFocus) {
-                    console.debug("yaml code changed");
-                    this.yamlCodeChange();
-                }
+                // Removed smart UI logic
             },
             deep: true,
         },
 
         "stack.composeENV": {
             handler() {
-                if (this.editorFocus) {
-                    console.debug("env code changed");
-                    this.yamlCodeChange();
-                }
-            },
-            deep: true,
-        },
-
-        jsonConfig: {
-            handler() {
-                if (!this.editorFocus) {
-                    console.debug("jsonConfig changed");
-
-                    let doc = new Document(this.jsonConfig);
-
-                    // Stick back the yaml comments
-                    if (this.yamlDoc) {
-                        copyYAMLComments(doc, this.yamlDoc);
-                    }
-
-                    this.stack.composeYAML = doc.toString();
-                    this.yamlDoc = doc;
-                }
+               // Removed smart UI logic
             },
             deep: true,
         },
@@ -470,7 +398,13 @@ export default {
                 endpoint: "",
             };
 
-            this.yamlCodeChange();
+            this.stack = {
+                name: "",
+                composeYAML,
+                composeENV,
+                isManagedByDockge: true,
+                endpoint: "",
+            };
 
         } else {
             this.stack.name = this.$route.params.stackName;
@@ -538,10 +472,17 @@ export default {
             this.processing = true;
             this.$root.emitAgent(this.endpoint, "getStack", this.stack.name, (res) => {
                 if (res.ok) {
+
                     this.stack = res.stack;
-                    this.yamlCodeChange();
                     this.processing = false;
                     this.bindTerminal();
+                    
+                    // Join combined terminal with timestamp preference
+                    this.$root.emitAgent(this.endpoint, "joinCombinedTerminal", this.stack.name, this.showTimestamps, (termRes) => {
+                        if (!termRes.ok) {
+                            this.$root.toastRes(termRes);
+                        }
+                    });
                 } else {
                     this.$root.toastRes(res);
                 }
@@ -551,31 +492,14 @@ export default {
         deployStack() {
             this.processing = true;
 
-            if (!this.jsonConfig.services) {
-                this.$root.toastError("No services found in compose.yaml");
-                this.processing = false;
-                return;
-            }
-
             // Check if services is object
-            if (typeof this.jsonConfig.services !== "object") {
-                this.$root.toastError("Services must be an object");
-                this.processing = false;
-                return;
-            }
-
-            let serviceNameList = Object.keys(this.jsonConfig.services);
+            // Removed jsonConfig check
 
             // Set the stack name if empty, use the first container name
-            if (!this.stack.name && serviceNameList.length > 0) {
-                let serviceName = serviceNameList[0];
-                let service = this.jsonConfig.services[serviceName];
-
-                if (service && service.container_name) {
-                    this.stack.name = service.container_name;
-                } else {
-                    this.stack.name = serviceName;
-                }
+            if (!this.stack.name) {
+                 this.$root.toastError("Stack name cannot be empty");
+                 this.processing = false;
+                 return;
             }
 
             this.bindTerminal();
@@ -587,6 +511,13 @@ export default {
                 if (res.ok) {
                     this.isEditMode = false;
                     this.$router.push(this.url);
+                    
+                    // Join combined terminal with timestamp preference
+                    this.$root.emitAgent(this.endpoint, "joinCombinedTerminal", this.stack.name, this.showTimestamps, (termRes) => {
+                        if (!termRes.ok) {
+                            this.$root.toastRes(termRes);
+                        }
+                    });
                 }
             });
         },
@@ -611,6 +542,15 @@ export default {
             this.$root.emitAgent(this.endpoint, "startStack", this.stack.name, (res) => {
                 this.processing = false;
                 this.$root.toastRes(res);
+                
+                if (res.ok) {
+                    // Join combined terminal with timestamp preference
+                    this.$root.emitAgent(this.endpoint, "joinCombinedTerminal", this.stack.name, this.showTimestamps, (termRes) => {
+                        if (!termRes.ok) {
+                            this.$root.toastRes(termRes);
+                        }
+                    });
+                }
             });
         },
 
@@ -704,91 +644,30 @@ export default {
             return highlight(code, languages.docker_env);
         },
 
-        yamlToJSON(yaml) {
-            let doc = parseDocument(yaml);
-            if (doc.errors.length > 0) {
-                throw doc.errors[0];
-            }
-
-            const config = doc.toJS() ?? {};
-
-            // Check data types
-            // "services" must be an object
-            if (!config.services) {
-                config.services = {};
-            }
-
-            if (Array.isArray(config.services) || typeof config.services !== "object") {
-                throw new Error("Services must be an object");
-            }
-
-            return {
-                config,
-                doc,
-            };
-        },
-
-        yamlCodeChange() {
-            try {
-                let { config, doc } = this.yamlToJSON(this.stack.composeYAML);
-
-                this.yamlDoc = doc;
-                this.jsonConfig = config;
-
-                let env = dotenv.parse(this.stack.composeENV);
-                let envYAML = envsubstYAML(this.stack.composeYAML, env);
-                this.envsubstJSONConfig = this.yamlToJSON(envYAML).config;
-
-                clearTimeout(yamlErrorTimeout);
-                this.yamlError = "";
-            } catch (e) {
-                clearTimeout(yamlErrorTimeout);
-
-                if (this.yamlError) {
-                    this.yamlError = e.message;
-
-                } else {
-                    yamlErrorTimeout = setTimeout(() => {
-                        this.yamlError = e.message;
-                    }, 3000);
-                }
-            }
-        },
-
         enableEditMode() {
             this.isEditMode = true;
         },
 
-        checkYAML() {
-
-        },
-
-        addContainer() {
-            this.checkYAML();
-
-            if (this.jsonConfig.services[this.newContainerName]) {
-                this.$root.toastError("Container name already exists");
-                return;
-            }
-
-            if (!this.newContainerName) {
-                this.$root.toastError("Container name cannot be empty");
-                return;
-            }
-
-            this.jsonConfig.services[this.newContainerName] = {
-                restart: "unless-stopped",
-            };
-            this.newContainerName = "";
-            let element = this.$refs.containerList.lastElementChild;
-            element.scrollIntoView({
-                block: "start",
-                behavior: "smooth"
-            });
-        },
-
         stackNameToLowercase() {
             this.stack.name = this.stack?.name?.toLowerCase();
+        },
+
+        onTimestampToggle() {
+            // Save preference to localStorage
+            localStorage.setItem("showTimestamps", this.showTimestamps.toString());
+            
+            // Rejoin the terminal with the new setting
+            if (!this.isAdd && this.stack.name) {
+                // Leave the current terminal
+                this.$root.emitAgent(this.endpoint, "leaveCombinedTerminal", this.stack.name, () => {
+                    // Rejoin with new timestamp setting
+                    this.$root.emitAgent(this.endpoint, "joinCombinedTerminal", this.stack.name, this.showTimestamps, (res) => {
+                        if (!res.ok) {
+                            this.$root.toastRes(res);
+                        }
+                    });
+                });
+            }
         },
 
     }
