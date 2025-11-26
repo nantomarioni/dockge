@@ -47,6 +47,10 @@
                     </button>
 
                     <BDropdown right text="" variant="normal">
+                        <BDropdownItem @click="fullRestartStack">
+                            <font-awesome-icon icon="rotate" class="me-1" />
+                            {{ $t("stopAndStart") }}
+                        </BDropdownItem>
                         <BDropdownItem @click="downStack">
                             <font-awesome-icon icon="stop" class="me-1" />
                             {{ $t("downStack") }}
@@ -576,6 +580,15 @@ export default {
             this.processing = true;
 
             this.$root.emitAgent(this.endpoint, "restartStack", this.stack.name, (res) => {
+                this.processing = false;
+                this.$root.toastRes(res);
+            });
+        },
+
+        fullRestartStack() {
+            this.processing = true;
+
+            this.$root.emitAgent(this.endpoint, "fullRestartStack", this.stack.name, (res) => {
                 this.processing = false;
                 this.$root.toastRes(res);
             });

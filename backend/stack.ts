@@ -433,6 +433,32 @@ export class Stack {
         return exitCode;
     }
 
+    async fullRestart(socket: DockgeSocket): Promise<number> {
+        const terminalName = getComposeTerminalName(socket.endpoint, this.name);
+
+        // We use a separate container to perform the restart to avoid killing the process if Dockge itself is being restarted.
+        // We assume the stacks directory is mapped 1:1 from host to container, which is the recommended setup.
+        const stackDir = this.path;
+
+        const args = [
+            "run",
+            "--rm",
+            "-d",
+            "-v", "/var/run/docker.sock:/var/run/docker.sock",
+            "-v", `${stackDir}:${stackDir}`,
+            "docker:cli",
+            "sh", "-c",
+            `cd "${stackDir}" && docker compose down && docker compose up -d --remove-orphans`
+        ];
+
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", args, this.path);
+
+        if (exitCode !== 0) {
+            throw new Error("Failed to full restart, please check the terminal output for more information.");
+        }
+        return exitCode;
+    }
+
     async down(socket: DockgeSocket): Promise<number> {
         const terminalName = getComposeTerminalName(socket.endpoint, this.name);
         let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", ["compose", "down"], this.path);
