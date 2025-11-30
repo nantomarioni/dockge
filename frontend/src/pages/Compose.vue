@@ -31,7 +31,12 @@
                         {{ $t("startStack") }}
                     </button>
 
-                    <button v-if="!isEditMode && active" class="btn btn-normal " :disabled="processing" @click="restartStack">
+                    <button v-if="!isEditMode && active" class="btn btn-normal" :disabled="processing" @click="stopStack">
+                        <font-awesome-icon icon="stop" class="me-1" />
+                        {{ $t("stopStack") }}
+                    </button>
+
+                    <button v-if="!isEditMode" class="btn btn-normal" :disabled="processing" @click="fullRestartStack">
                         <font-awesome-icon icon="rotate" class="me-1" />
                         {{ $t("restartStack") }}
                     </button>
@@ -40,22 +45,6 @@
                         <font-awesome-icon icon="cloud-arrow-down" class="me-1" />
                         {{ $t("updateStack") }}
                     </button>
-
-                    <button v-if="!isEditMode && active" class="btn btn-normal" :disabled="processing" @click="stopStack">
-                        <font-awesome-icon icon="stop" class="me-1" />
-                        {{ $t("stopStack") }}
-                    </button>
-
-                    <BDropdown right text="" variant="normal">
-                        <BDropdownItem @click="fullRestartStack">
-                            <font-awesome-icon icon="rotate" class="me-1" />
-                            {{ $t("stopAndStart") }}
-                        </BDropdownItem>
-                        <BDropdownItem @click="downStack">
-                            <font-awesome-icon icon="stop" class="me-1" />
-                            {{ $t("downStack") }}
-                        </BDropdownItem>
-                    </BDropdown>
                 </div>
 
                 <button v-if="isEditMode && !isAdd" class="btn btn-normal" :disabled="processing" @click="discardStack">{{ $t("discardStack") }}</button>
@@ -110,38 +99,100 @@
                         </div>
                     </div>
 
+                    <!-- Details -->
+                    <div v-if="!isAdd && stack.isManagedByDockge" class="mb-4" v-show="!isLogsExpanded">
+                        <h4 class="mb-3">{{ $t("details") }}</h4>
+                        <div class="shadow-box big-padding">
+                            <div v-if="!serviceStatusList || Object.keys(serviceStatusList).length === 0">
+                                {{ $t("noContainersRunning") }}
+                            </div>
+                            <div v-else class="table-responsive">
+                                <table class="table table-borderless table-hover mb-0 details-table">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ $t("containerName") }}</th>
+                                            <th>{{ $t("dockerImage") }}</th>
+                                            <th>{{ $t("status") }}</th>
+                                            <th class="text-end">{{ $t("actions") }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr v-for="(container, service) in serviceStatusList" :key="service">
+                                            <td class="align-middle">{{ container.name }}</td>
+                                            <td class="align-middle">{{ container.image }}</td>
+                                            <td class="align-middle">
+                                                <span class="badge" :class="getBadgeClass(container.status)">{{ container.status }}</span>
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <button class="btn btn-outline-normal" :title="$t('start')" @click="containerAction('startContainer', service)" v-if="container.state !== 'running'">
+                                                        <font-awesome-icon icon="play" />
+                                                    </button>
+                                                    <button class="btn btn-outline-normal" :title="$t('stop')" @click="containerAction('stopContainer', service)" v-if="container.state === 'running'">
+                                                        <font-awesome-icon icon="stop" />
+                                                    </button>
+                                                    <button class="btn btn-outline-normal" :title="$t('restart')" @click="containerAction('restartContainer', service)">
+                                                        <font-awesome-icon icon="rotate" />
+                                                    </button>
+                                                    <button class="btn btn-outline-normal" :title="$t('update')" @click="containerAction('updateContainer', service)">
+                                                        <font-awesome-icon icon="cloud-arrow-down" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Combined Terminal Output -->
                     <div v-show="!isEditMode">
                         <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h4 class="mb-0">{{ $t("terminal") }}</h4>
-                            <div class="form-check form-switch">
-                                <input 
-                                    id="timestampToggle" 
-                                    v-model="showTimestamps" 
-                                    class="form-check-input" 
-                                    type="checkbox"
-                                    @change="onTimestampToggle"
-                                >
-                                <label class="form-check-label" for="timestampToggle">
-                                    Show Timestamps
-                                </label>
+                            <h4 class="mb-0 cursor-pointer" @click="isLogsCollapsed = !isLogsCollapsed">
+                                <font-awesome-icon :icon="isLogsCollapsed ? 'chevron-right' : 'chevron-down'" class="me-2" />
+                                {{ $t("logs") }}
+                            </h4>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="form-check form-switch">
+                                    <input 
+                                        id="timestampToggle" 
+                                        v-model="showTimestamps" 
+                                        class="form-check-input" 
+                                        type="checkbox"
+                                        @change="onTimestampToggle"
+                                    >
+                                    <label class="form-check-label" for="timestampToggle">
+                                        Show Timestamps
+                                    </label>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary" @click="toggleLogsExpanded" v-if="!isLogsCollapsed">
+                                    <font-awesome-icon :icon="isLogsExpanded ? 'compress' : 'expand'" />
+                                </button>
                             </div>
                         </div>
-                        <Terminal
-                            ref="combinedTerminal"
-                            class="mb-3 terminal"
-                            :name="combinedTerminalName"
-                            :endpoint="endpoint"
-                            :rows="combinedTerminalRows"
-                            :cols="combinedTerminalCols"
-                            style="height: 315px;"
-                        ></Terminal>
+                        <div v-show="!isLogsCollapsed">
+                            <Terminal
+                                ref="combinedTerminal"
+                                class="mb-3 terminal"
+                                :name="combinedTerminalName"
+                                :endpoint="endpoint"
+                                :rows="combinedTerminalRows"
+                                :cols="combinedTerminalCols"
+                                :style="{ height: isLogsExpanded ? 'calc(100vh - 273px)' : '315px' }"
+                            ></Terminal>
+                        </div>
                     </div>
 
-                    <h4 class="mb-3">{{ stack.composeFileName }}</h4>
+                    <div class="d-flex justify-content-between align-items-center mb-3" v-if="!isLogsExpanded">
+                        <h4 class="mb-0 cursor-pointer" @click="isComposeCollapsed = !isComposeCollapsed">
+                            <font-awesome-icon :icon="isComposeCollapsed ? 'chevron-right' : 'chevron-down'" class="me-2" />
+                            {{ stack.composeFileName }}
+                        </h4>
+                    </div>
 
                     <!-- YAML editor -->
-                    <div class="shadow-box mb-3 editor-box" :class="{'edit-mode' : isEditMode}">
+                    <div v-show="!isComposeCollapsed && !isLogsExpanded" class="shadow-box mb-3 editor-box" :class="{'edit-mode' : isEditMode}">
                         <prism-editor
                             ref="editor"
                             v-model="stack.composeYAML"
@@ -270,6 +321,9 @@ export default {
 
             stopServiceStatusTimeout: false,
             showTimestamps: localStorage.getItem("showTimestamps") === "true",
+            isLogsExpanded: false,
+            isLogsCollapsed: false,
+            isComposeCollapsed: true,
         };
     },
     computed: {
@@ -683,6 +737,38 @@ export default {
             }
         },
 
+        getBadgeClass(status) {
+            if (status === "running" || status === "healthy") {
+                return "bg-success";
+            } else if (status === "exited" || status === "dead") {
+                return "bg-danger";
+            } else if (status === "restarting") {
+                return "bg-warning";
+            }
+            return "bg-secondary";
+        },
+
+        containerAction(action, serviceName) {
+            this.processing = true;
+            this.$root.emitAgent(this.endpoint, action, this.stack.name, serviceName, (res) => {
+                this.processing = false;
+                this.$root.toastRes(res);
+                if (res.ok) {
+                    this.requestServiceStatus();
+                }
+            });
+        },
+
+        toggleLogsExpanded() {
+            this.isLogsExpanded = !this.isLogsExpanded;
+            // Wait for DOM update then fit terminal
+            this.$nextTick(() => {
+                if (this.$refs.combinedTerminal) {
+                    this.$refs.combinedTerminal.fit();
+                }
+            });
+        },
+
     }
 };
 </script>
@@ -692,6 +778,11 @@ export default {
 
 .terminal {
     height: 200px;
+    
+    // When expanded, let the style binding control height, but ensure it doesn't overflow
+    &[style*="calc"] {
+        overflow: hidden;
+    }
 }
 
 .editor-box {
@@ -705,5 +796,24 @@ export default {
 .agent-name {
     font-size: 13px;
     color: $dark-font-color3;
+}
+
+.details-table {
+    th {
+        font-weight: 600;
+        color: $dark-font-color3;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+    }
+
+    td {
+        color: $dark-font-color;
+    }
+
+    // Ensure transparent background for table cells to blend with shadow-box
+    &.table {
+        --bs-table-bg: transparent;
+        --bs-table-accent-bg: transparent;
+    }
 }
 </style>

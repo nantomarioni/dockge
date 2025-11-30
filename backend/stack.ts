@@ -534,10 +534,10 @@ export class Stack {
     }
 
     async getServiceStatusList() {
-        let statusList = new Map<string, number>();
+        let statusList = new Map<string, object>();
 
         try {
-            let res = await childProcessAsync.spawn("docker", ["compose", "ps", "--format", "json"], {
+            let res = await childProcessAsync.spawn("docker", ["compose", "ps", "--all", "--format", "json"], {
                 cwd: this.path,
                 encoding: "utf-8",
             });
@@ -551,11 +551,19 @@ export class Stack {
             for (let line of lines) {
                 try {
                     let obj = JSON.parse(line);
-                    if (obj.Health === "") {
-                        statusList.set(obj.Service, obj.State);
-                    } else {
-                        statusList.set(obj.Service, obj.Health);
+                    let status = obj.State;
+                    if (obj.Health !== "") {
+                        status = obj.Health;
                     }
+
+                    statusList.set(obj.Service, {
+                        name: obj.Name,
+                        service: obj.Service,
+                        image: obj.Image,
+                        status: status,
+                        state: obj.State,
+                        health: obj.Health,
+                    });
                 } catch (e) {
                 }
             }
@@ -565,6 +573,66 @@ export class Stack {
             log.error("getServiceStatusList", e);
             return statusList;
         }
+    }
 
+    async startContainer(socket: DockgeSocket, serviceName: string): Promise<number> {
+        const terminalName = getComposeTerminalName(socket.endpoint, this.name);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", ["compose", "start", serviceName], this.path);
+        if (exitCode !== 0) {
+            throw new Error("Failed to start container, please check the terminal output for more information.");
+        }
+        return exitCode;
+    }
+
+    async stopContainer(socket: DockgeSocket, serviceName: string): Promise<number> {
+        const terminalName = getComposeTerminalName(socket.endpoint, this.name);
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", ["compose", "stop", serviceName], this.path);
+        if (exitCode !== 0) {
+            throw new Error("Failed to stop container, please check the terminal output for more information.");
+        }
+        return exitCode;
+    }
+
+    async restartContainer(socket: DockgeSocket, serviceName: string): Promise<number> {
+        const terminalName = getComposeTerminalName(socket.endpoint, this.name);
+
+        // We use a separate container to perform the restart to avoid killing the process if Dockge itself is being restarted.
+        // We assume the stacks directory is mapped 1:1 from host to container, which is the recommended setup.
+        const stackDir = this.path;
+
+        const args = [
+            "run",
+            "--rm",
+            "-d",
+            "-v", "/var/run/docker.sock:/var/run/docker.sock",
+            "-v", `${stackDir}:${stackDir}`,
+            "docker:cli",
+            "sh", "-c",
+            `cd "${stackDir}" && docker compose down ${serviceName} && docker compose up -d ${serviceName}`
+        ];
+
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", args, this.path);
+
+        if (exitCode !== 0) {
+            throw new Error("Failed to restart container, please check the terminal output for more information.");
+        }
+        return exitCode;
+    }
+
+    async updateContainer(socket: DockgeSocket, serviceName: string): Promise<number> {
+        const terminalName = getComposeTerminalName(socket.endpoint, this.name);
+
+        // Pull the image first
+        let exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", ["compose", "pull", serviceName], this.path);
+        if (exitCode !== 0) {
+            throw new Error("Failed to pull image, please check the terminal output for more information.");
+        }
+
+        // Recreate the container
+        exitCode = await Terminal.exec(this.server, socket, terminalName, "docker", ["compose", "up", "-d", "--no-deps", serviceName], this.path);
+        if (exitCode !== 0) {
+            throw new Error("Failed to update container, please check the terminal output for more information.");
+        }
+        return exitCode;
     }
 }

@@ -238,6 +238,10 @@ export default {
             let rows = this.terminal.rows;
             let cols = this.terminal.cols;
             this.$root.emitAgent(this.endpoint, "terminalResize", this.name, rows, cols);
+        },
+
+        fit() {
+            this.updateTerminalSize();
         }
     }
 };

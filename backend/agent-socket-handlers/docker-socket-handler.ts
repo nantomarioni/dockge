@@ -273,6 +273,37 @@ export class DockerSocketHandler extends AgentSocketHandler {
                 callbackError(e, callback);
             }
         });
+
+        // Container Operations
+        const containerOps = ["startContainer", "stopContainer", "restartContainer", "updateContainer"];
+        for (const op of containerOps) {
+            agentSocket.on(op, async (stackName: unknown, serviceName: unknown, callback) => {
+                try {
+                    checkLogin(socket);
+
+                    if (typeof (stackName) !== "string") {
+                        throw new ValidationError("Stack name must be a string");
+                    }
+                    if (typeof (serviceName) !== "string") {
+                        throw new ValidationError("Service name must be a string");
+                    }
+
+                    const stack = await Stack.getStack(server, stackName);
+
+                    // Call the corresponding method on the stack instance
+                    // @ts-ignore
+                    await stack[op](socket, serviceName);
+
+                    callbackResult({
+                        ok: true,
+                        msg: "Done",
+                        msgi18n: true,
+                    }, callback);
+                } catch (e) {
+                    callbackError(e, callback);
+                }
+            });
+        }
     }
 
     async saveStack(server: DockgeServer, name: unknown, composeYAML: unknown, composeENV: unknown, isAdd: unknown): Promise<Stack> {
